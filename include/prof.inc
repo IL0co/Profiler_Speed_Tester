@@ -158,7 +158,7 @@ stock void Prof_Results()
 			Format(buffer, sizeof(buffer), buffer[1]);
 
 		time = g_hTestsTotalResult.Get(id);
-		PrintToServer(PLUGIN_TAG ... "%23s|  %.6f  | %.9f | x%.4f | %.1f%% %s", buffer, time, (time / g_iRepeats), (lost_time / time), (best_time/ time * 100.0),
+		PrintToServer(PLUGIN_TAG ... "%23s|  %.6f  | %.9f | x%.4f | %.1f%% %s", buffer, time, (time * 1000 / g_iRepeats), (lost_time / time), (best_time/ time * 100.0),
 		id == best_place ? "<<== Fastest" : (id == lost_place ? "<<== Slowest" : ""));
 	}
 
