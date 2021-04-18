@@ -1,104 +1,106 @@
+#if defined _prof_speed_test_included
+ #endinput
+#endif
+#define _prof_speed_test_included
 
 #include <profiler>
 #include <sourcemod>
 
 /*
-	Автор: iLoco
-	Версия: 1.0.0
+	Author: iLoco
+	Version: 1.0.1
 	
 	https://hlmod.ru/members/iloco.94537/
 */
 
 /*
-	Пример использования:
+	Usage example:
 
 	
-	char buff[256];
+	char buff[] = {"asdklastiajlkncnjansiejwij ijwoijadl knsjkld jawjd ioajsdl nasnd jaksnd kjasnhkjd najnd kjasn dkj"};
 
 	public void OnPluginStart()
 	{
-		Prof_Start(1000);
-		Prof_Test("_Format");
-		Prof_Test("_IntToString");
+		Prof_Start(10000);
+		Prof_Test("_StrEqual");
+		Prof_Test("_strcmp");
 		Prof_Results();
 	}
 
-	public void _Format()
+	public bool _StrEqual()
 	{
-		Format(buff, sizeof(buff), "657");
+		if(StrEqual(buff, "some text", false))
+			return true;
+
+		return false;
 	}
 
-	public void _IntToString()
+	public bool _strcmp()
 	{
-		IntToString(657, buff, sizeof(buff));
+		if(strcmp(buff, "some text", false) == 0)
+			return true;
+
+		return false;
 	}
 */
 
-enum struct ProfData
-{
-	int Repeats;
-	bool IsStarted;
+bool g_bIsStarted;
+int g_iRepeats;
+ArrayList g_hFunctionsNames;
+ArrayList g_hTestsTotalResult;
 
-	ArrayList FunctionsNames;
-	ArrayList TestsTotalResult;
-
-	void Reset()
-	{
-		this.IsStarted = false;
-		delete this.FunctionsNames;
-		delete this.TestsTotalResult;
-	}
-
-	void Init()
-	{
-		this.FunctionsNames = new ArrayList(256);
-		this.TestsTotalResult = new ArrayList();
-	}
-}
-
-ProfData g_ProfData;
+#define PLUGIN_TAG "[Profiling] "
 
 /*
- * Начать проверку
+ * Start check
  *	-
- * @param repeats			Количество повторов проверки одной функции
+ * @param repeats			The number of repetitions of checking one function
  *	-
  * @noreturn 
 */
 stock void Prof_Start(int repeats = 100)
 {
-	if(g_ProfData.IsStarted)
-		ThrowError("Проверка уже начата!");
+	if(g_bIsStarted)
+		ThrowError("Check already started!");
 
-	g_ProfData.Repeats = repeats;
-	g_ProfData.IsStarted = true;
-	g_ProfData.Init();
+	g_iRepeats = repeats;
+	g_bIsStarted = true;
+	g_hFunctionsNames = new ArrayList(256);
+	g_hTestsTotalResult = new ArrayList();
+
+	PrintToServer(" ");
+	PrintToServer(PLUGIN_TAG ... "Started");
 }
 
 /*
- * Добавить функцию к проверке и сравнению
+ * Add function to check and compare
  *	-
- * @param func_name			Название функции
+ * @param func_name			Function name
  *	-
  * @noreturn 
 */
 stock void Prof_Test(char[] func_name)
 {
-	if(!g_ProfData.IsStarted)
-		ThrowError("Проверка ещё не начата!");
+	if(!g_bIsStarted)
+		ThrowError("Check not started yet!");
 
 	Function func = GetFunctionByName(INVALID_HANDLE, func_name);
 
 	if(func == INVALID_FUNCTION)
-		ThrowError("Не валидная функция! '%s'", func_name);
+		ThrowError("Invalid function! '%s'", func_name);
 
-	g_ProfData.FunctionsNames.PushString(func_name);
+	if(g_hFunctionsNames.FindString(func_name) != -1)
+		ThrowError("Function already registered! '%s'", func_name);
+
+	g_hFunctionsNames.PushString(func_name);
+	
+	PrintToServer(PLUGIN_TAG ... "Launching %s...", func_name);
 
 	Profiler prof = new Profiler();
 
 	prof.Start()
 
-	for(int num; num < g_ProfData.Repeats; num++)
+	for(int num; num < g_iRepeats; num++)
 	{
 		Call_StartFunction(INVALID_HANDLE, func);
 		Call_Finish();
@@ -106,13 +108,13 @@ stock void Prof_Test(char[] func_name)
 
 	prof.Stop()
 
-	g_ProfData.TestsTotalResult.Push(prof.Time);
+	g_hTestsTotalResult.Push(prof.Time);
 
 	delete prof;
 }
 
 /*
- * Закончить проверку и вывести результаты в консоль сервера
+ * Finish checking and output the results to the server console
  *	-
  * @noparams
  *	-
@@ -120,16 +122,16 @@ stock void Prof_Test(char[] func_name)
 */
 stock void Prof_Results()
 {
-	if(!g_ProfData.IsStarted)
-		ThrowError("Проверка ещё не начата!");
+	if(!g_bIsStarted)
+		ThrowError("Check not started yet!");
 
 	char buffer[23];
 	float best_time = 1.0, lost_time, time;
 	int best_place, lost_place;
 
-	for(int id; id < g_ProfData.FunctionsNames.Length; id++)
+	for(int id; id < g_hFunctionsNames.Length; id++)
 	{
-		time = g_ProfData.TestsTotalResult.Get(id);
+		time = g_hTestsTotalResult.Get(id);
 
 		if(time < best_time)
 		{
@@ -145,22 +147,24 @@ stock void Prof_Results()
 	}
 
 	PrintToServer(" ");
-	PrintToServer("Результат с %i тестов:", g_ProfData.Repeats);
-	PrintToServer("        Функция        |   Всего   |   Среднее   | Скорость | Продуктивность");
+	PrintToServer(PLUGIN_TAG ... "Result with %i tests:", g_iRepeats);
+	PrintToServer(PLUGIN_TAG ... "     Function name     | Total, sec |   Avg, ms   |  Speed  | Performance");
 
-	for(int id; id < g_ProfData.FunctionsNames.Length; id++)
+	for(int id; id < g_hFunctionsNames.Length; id++)
 	{
-		g_ProfData.FunctionsNames.GetString(id, buffer, sizeof(buffer));
+		g_hFunctionsNames.GetString(id, buffer, sizeof(buffer));
 
 		if(buffer[0] == '_')
 			Format(buffer, sizeof(buffer), buffer[1]);
 
-		time = g_ProfData.TestsTotalResult.Get(id);
-		PrintToServer("%23s| %.7f | %.9f |  x%.3f  | %.1f%% %s", buffer, time, (time / g_ProfData.Repeats), (lost_time / time), (lost_time / time * 100.0),
-		id == best_place ? "<<== Быстрее всех" : (id == lost_place ? "<<== Самое медленное" : ""));
+		time = g_hTestsTotalResult.Get(id);
+		PrintToServer(PLUGIN_TAG ... "%23s|  %.6f  | %.9f | x%.4f | %.1f%% %s", buffer, time, (time / g_iRepeats), (lost_time / time), (best_time/ time * 100.0),
+		id == best_place ? "<<== Fastest" : (id == lost_place ? "<<== Slowest" : ""));
 	}
 
-	g_ProfData.Reset();
+	delete g_hFunctionsNames;
+	delete g_hTestsTotalResult;
+	g_bIsStarted = false;
 
 	PrintToServer(" ");
 }
